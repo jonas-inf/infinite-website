@@ -898,6 +898,8 @@ body:has(dialog[open]) { overflow: hidden; }
 .steps.one .step-body { display: block; }
 .formbox { border: 1px solid var(--line); padding: 24px; }
 @media (min-width: 768px) { .formbox { padding: 40px; } }
+.ghl-form { display: block; width: 100%; height: 1300px; border: 0; }
+.formbox a { overflow-wrap: anywhere; }
 .center-page { min-height: 44vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; text-align: center; }
 .center-page .lgrid { width: min(100%, 480px); text-align: left; }
 .hours { margin: 12px 0 24px; border-top: 1px solid var(--ink); }
@@ -950,3 +952,4 @@ body:has(dialog[open]) { overflow: hidden; }
 .fsms { font-size: 14px; line-height: 1.55; color: var(--muted); max-width: 860px; }
 .fsms b { color: var(--ink); font-weight: 600; }
 .fsms a { text-decoration: underline; text-underline-offset: 3px; }
+textarea.input { min-height: 140px; padding-top: 12px; resize: vertical; }
