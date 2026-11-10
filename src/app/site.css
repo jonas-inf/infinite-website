@@ -534,6 +534,7 @@ html:not(.js) .rband .rmore { display: none; }   /* without the script the butto
 .gp { display: flex; flex-direction: column; gap: 16px; padding-top: 24px; border-top: 1px solid var(--line); }
 .gp[hidden], .gp-sample[hidden], .gp-choice[hidden] { display: none; }
 .gp:focus { outline: none; }
+.is-gp > .gp { padding-top: 0; border-top: 0; }
 .gp .t-h3 span { white-space: nowrap; }
 .gp-sample { font-size: 16px; color: var(--body); }
 .gp-step { display: grid; gap: 12px; margin-top: 8px; }

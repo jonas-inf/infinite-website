@@ -166,6 +166,10 @@
     // The free-session line changes only once the calendar is really on screen
     const line = $("[data-gp-line]", ok);
     if (line) { line._plain = line._plain || line.textContent; line.textContent = line._plain; line.hidden = false; }
+    // Once the calendar is on screen it replaces the "received" heading and line (Will, D-081); they stay as the fallback
+    const title = $(":scope > h3", ok);
+    const plain = (on) => { title.hidden = !on; if (line) line.hidden = !on; ok.classList.toggle("is-gp", !on); };
+    plain(true);
     let start = null;
     const pickButton = (label, pressed, onClick) => {
       const b = document.createElement("button");
@@ -260,7 +264,7 @@
     const sample = $("[data-gp-sample]", box);
     box.hidden = true;
     sample.hidden = true;
-    const show = (days, isSample) => { if (days.length) { sample.hidden = !isSample; if (line) line.textContent = line.dataset.gpLine; render(days); } };
+    const show = (days, isSample) => { if (days.length) { sample.hidden = !isSample; plain(false); render(days); } };
     if (!APP) { show(sampleDays(), true); return; }
     fetch("/api/slots")
       .then((r) => r.json())
