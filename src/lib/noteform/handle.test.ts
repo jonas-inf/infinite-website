@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { handleCareers } from "./handle.ts";
+import { CAREERS, handleNoteForm } from "./handle.ts";
+const handleCareers = (r: Parameters<typeof handleNoteForm>[1], d: Deps) => handleNoteForm(CAREERS, r, d);
 import type { Deps } from "../lead/handle.ts";
 
 type Call = { url: string; method: string; body: Record<string, unknown> };
@@ -56,3 +57,4 @@ test("careers: a GHL failure still answers ok and logs the application", async (
   assert.equal(r.json.delivered, undefined);
   assert.ok(logs.some((l) => l.includes("DELIVERY FAILED") && l.includes("s@example.com")));
 });
+

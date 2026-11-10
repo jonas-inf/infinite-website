@@ -477,21 +477,21 @@
   });
 
   // ---------- Careers form: its own endpoint and tag, never the lead form (D-076) ----------
-  $$("form[data-careers]").forEach((form) => {
+  $$("form[data-noteform]").forEach((form) => {
     const t0 = Date.now();
-    const ok = form.parentElement.querySelector("[data-careers-ok]");
-    const err = $("[data-careers-error]", form);
+    const ok = form.parentElement.querySelector("[data-noteform-ok]");
+    const err = $("[data-noteform-error]", form);
     const btn = $("button[type=submit]", form);
     form.addEventListener("submit", (ev) => {
       ev.preventDefault();
       if (!form.reportValidity()) return;
       const done = () => { form.hidden = true; ok.hidden = false; ok.focus({ preventScroll: true }); ok.scrollIntoView({ block: "nearest" }); };
-      if (!APP) { console.info("[preview] careers form submitted, not sent"); done(); return; }
+      if (!APP) { console.info("[preview] form submitted, not sent:", form.getAttribute("action")); done(); return; }
       btn.disabled = true;
       err.hidden = true;
       const body = { ...Object.fromEntries(new FormData(form)), elapsed_ms: Date.now() - t0 };
-      fetch("/api/careers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
-        .then((r) => r.json().then((j) => { if (!r.ok || !j.ok) throw new Error("careers"); done(); }))
+      fetch(form.getAttribute("action"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+        .then((r) => r.json().then((j) => { if (!r.ok || !j.ok) throw new Error("form"); done(); }))
         .catch(() => { btn.disabled = false; err.textContent = "That didn't send. Please try again."; err.hidden = false; });
     });
   });

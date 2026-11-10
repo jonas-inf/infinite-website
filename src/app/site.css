@@ -898,7 +898,6 @@ body:has(dialog[open]) { overflow: hidden; }
 .steps.one .step-body { display: block; }
 .formbox { border: 1px solid var(--line); padding: 24px; }
 @media (min-width: 768px) { .formbox { padding: 40px; } }
-.ghl-form { display: block; width: 100%; height: 1300px; border: 0; }
 .formbox a { overflow-wrap: anywhere; }
 .center-page { min-height: 44vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; text-align: center; }
 .center-page .lgrid { width: min(100%, 480px); text-align: left; }

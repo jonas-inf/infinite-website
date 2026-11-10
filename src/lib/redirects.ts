@@ -29,6 +29,7 @@ export const LEGACY: [string, string][] = [
   ["/locations/round-rock", "/locations/roundrock"],
   ["/locations/infinitefitnessaustin.com/locations", "/locations"], // a broken relative link on the old site, in Google's 404 list
   ["/talk-with-us", "/book"],
+  ["/leaving", "/"], // page removed (D-078)
   ["/contact", "/book"],
   ["/contact-us", "/book"],
   ["/apply", "/careers"],
