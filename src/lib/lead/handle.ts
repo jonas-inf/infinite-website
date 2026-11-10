@@ -1,13 +1,14 @@
-// POST /api/lead. Every lead goes to the sub-account of the studio it named, or nowhere: a studio without its own
-// credentials is preview mode, never another studio's (D-012). Import-free so `node --test` can check it.
+// POST /api/lead. All three studios share one GHL sub-account (D-066): each lead carries its own studio in the location
+// field and a studio tag, and a bad studio is refused, never guessed. Import-free so `node --test` can check it.
 export const STUDIO_KEYS = ["shoal_creek", "steiner_ranch", "round_rock"] as const;
 export type StudioKey = (typeof STUDIO_KEYS)[number];
-export type Pins = Record<StudioKey, string | null>;
 
-// Each sub-account's location id, pinned here once the client supplies it (D-012). null refuses delivery.
-export const LOCATION_PINS: Pins = { shoal_creek: null, steiner_ranch: null, round_rock: null };
+export const LOCATION_ID = "JDjtGIq6vm95CBfpbfKs"; // the grouped sub-account for all three studios
+const STUDIO_FIELD = "q1E72JUxRsPlma4Rq5Q4"; // "Select your preferred Infinite Fitness Location"; its options are these names
+const STUDIO_FIELD_2 = "85UFCvQ59zDfMLF6iluC"; // "Choose Your Location"; its options are these names plus ", TX" (D-072)
+export const STUDIO_NAME: Record<StudioKey, string> = { shoal_creek: "Shoal Creek", steiner_ranch: "Steiner Ranch", round_rock: "Round Rock" };
 
-const TAG: Record<StudioKey, string> = { shoal_creek: "website-shoal-creek", steiner_ranch: "website-steiner-ranch", round_rock: "website-round-rock" };
+export const TAG: Record<StudioKey, string> = { shoal_creek: "website-shoal-creek", steiner_ranch: "website-steiner-ranch", round_rock: "website-round-rock" };
 const TRIGGER = "website-lead";
 const GHL_API = "https://services.leadconnectorhq.com";
 const GHL_VERSION = "2021-07-28";
@@ -17,19 +18,18 @@ const LIVE_ORIGINS = ["https://infinitefitnessaustin.com", "https://www.infinite
 
 export type Deps = {
   env: Record<string, string | undefined>;
-  pins: Pins;
   live: boolean;
   fetch: typeof fetch;
   sleep: (ms: number) => Promise<void>;
   log: (line: string) => void;
 };
-export type LeadRequest = { raw: string; contentType: string | null; origin: string | null; referer: string | null };
+export type LeadRequest = { raw: string; contentType: string | null; origin: string | null; referer: string | null; userAgent?: string | null; ip?: string | null };
 export type LeadResponse = { status: number; json: { ok: boolean; preview?: boolean; delivered?: boolean; missing?: string }; location?: string };
 type Body = Record<string, unknown>;
 
-const text = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+export const text = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 
-function parse(raw: string, contentType: string | null): Body | null {
+export function parse(raw: string, contentType: string | null): Body | null {
   if (contentType?.includes("application/json")) {
     try {
       const v = JSON.parse(raw);
@@ -54,19 +54,19 @@ function originAllowed(req: LeadRequest, live: boolean): boolean {
   });
 }
 
-function spamReason(b: Body, req: LeadRequest, isJson: boolean, live: boolean): string | null {
+export function spamReason(b: Body, req: LeadRequest, isJson: boolean, live: boolean): string | null {
   if (text(b.hp_extra)) return "honeypot";
   if (isJson && !(Number(b.elapsed_ms) >= MIN_MS)) return "time-trap";
   if (!originAllowed(req, live)) return "origin";
   return null;
 }
 
-async function ghl(d: Deps, token: string, path: string, method: string, body?: unknown): Promise<Response> {
+export async function ghl(d: Deps, token: string, path: string, method: string, body?: unknown, version = GHL_VERSION): Promise<Response> {
   const call = () =>
     d.fetch(`${GHL_API}${path}`, {
       method,
       body: body === undefined ? undefined : JSON.stringify(body),
-      headers: { Authorization: `Bearer ${token}`, Version: GHL_VERSION, "Content-Type": "application/json", Accept: "application/json" },
+      headers: { Authorization: `Bearer ${token}`, Version: version, "Content-Type": "application/json", Accept: "application/json" },
       signal: AbortSignal.timeout(5000),
     });
   let res = await call().catch(() => null);
@@ -77,26 +77,153 @@ async function ghl(d: Deps, token: string, path: string, method: string, body?: 
   return res;
 }
 
-async function deliver(d: Deps, key: StudioKey, token: string, locationId: string, b: Body) {
-  const contact = { locationId, firstName: text(b.first_name), lastName: text(b.last_name) || undefined, email: text(b.email), phone: text(b.phone), source: "Website" };
-  let res = await ghl(d, token, "/contacts/upsert", "POST", contact);
-  let note = text(b.interest) === "pricing" ? "Asked for pricing on the website." : "";
-  if (res.status === 400 || res.status === 422) {
-    note = `${note} Phone as typed: ${contact.phone}`.trim();
-    res = await ghl(d, token, "/contacts/upsert", "POST", { ...contact, phone: undefined });
+// D-071: the "Website Attribution" folder (made by tools/web/ghl-setup.mjs) is filled by name, once,
+// when the website creates the contact; every submission also gets a note that starts with NOTE_MARKER.
+const NOTE_MARKER = "🌐 WEBSITE LEAD"; // submission numbers count notes that start with it
+const PARAMS: [string, string][] = [
+  ["utm_source", "UTM Source"], ["utm_medium", "UTM Medium"], ["utm_campaign", "UTM Campaign"], ["utm_term", "UTM Term"], ["utm_content", "UTM Content"],
+  ["gclid", "Google Click ID"], ["gbraid", "GBRAID"], ["wbraid", "WBRAID"], ["fbclid", "Facebook Click ID"], ["msclkid", "Microsoft Click ID"],
+];
+const FORM_NAME: Record<string, string> = { home: "Home page form", st: "Studio page form", bk: "Book page form", dr: "Booking drawer", pr: "Pricing pop-up" };
+const CT = new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", weekday: "short", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
+
+const toUrl = (v: unknown) => { try { return new URL(text(v)); } catch { return null; } };
+const dash = (v: string) => v || "—";
+
+// The page the form was sent from wins, then the page the visit started on, so a click id survives browsing
+export function attribution(b: Body): Record<string, string> {
+  const page = toUrl(b.page), land = toUrl(b.landing_url);
+  return Object.fromEntries(PARAMS.map(([k]) => [k, (page?.searchParams.get(k) || land?.searchParams.get(k) || "").trim().slice(0, 500)]));
+}
+
+function channel(a: Record<string, string>, referrer: string, siteHost: string): string {
+  if (a.gclid || a.gbraid || a.wbraid) return "Google Ads (paid search)";
+  if (a.msclkid) return "Microsoft Ads (paid search)";
+  if (/^(fb|facebook|ig|instagram|meta)$/i.test(a.utm_source) && /^(cpc|ppc|paid|paid[_-]?social|paidsocial|ads?)$/i.test(a.utm_medium)) return "Meta Ads (paid social)";
+  if (a.utm_source) return `UTM-tagged: ${a.utm_source}${a.utm_medium ? ` / ${a.utm_medium}` : ""}`;
+  if (a.fbclid) return "Facebook / Instagram (fbclid, no UTMs)";
+  const ref = toUrl(referrer)?.hostname.replace(/^www\./, "") ?? "";
+  if (ref && ref !== siteHost) {
+    if (/(^|\.)(google|bing|yahoo|duckduckgo|ecosia|brave)\./i.test(ref)) return `Organic search (${ref})`;
+    if (/(^|\.)(facebook|instagram|t|twitter|x|linkedin|tiktok|youtube|reddit|pinterest|nextdoor)\.(com|co)$/i.test(ref)) return `Organic social (${ref})`;
+    return `Referral (${ref})`;
   }
+  return "Direct (no referrer, no UTMs)";
+}
+
+function device(ua: string): string {
+  if (!ua) return "unknown";
+  const kind = /iPad/.test(ua) ? "iPad" : /iPhone/.test(ua) ? "iPhone" : /Android/.test(ua) ? (/Mobile/.test(ua) ? "Android phone" : "Android tablet")
+    : /Macintosh/.test(ua) ? "Mac" : /Windows/.test(ua) ? "Windows PC" : /CrOS/.test(ua) ? "Chromebook" : "Other";
+  const browser = /FBAN|FBAV/.test(ua) ? "Facebook in-app browser" : /Instagram/.test(ua) ? "Instagram in-app browser" : /Edg\//.test(ua) ? "Edge"
+    : /CriOS|Chrome\//.test(ua) ? "Chrome" : /FxiOS|Firefox\//.test(ua) ? "Firefox" : /Safari\//.test(ua) ? "Safari" : "Other";
+  return `${kind} · ${browser}`;
+}
+
+function since(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return "unknown";
+  const s = Math.round(ms / 1000), d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
+  return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m ${s % 60}s`;
+}
+
+export function firstTouch(key: StudioKey, b: Body): Record<string, string> {
+  const a = attribution(b);
+  return {
+    ...Object.fromEntries(PARAMS.map(([k, name]) => [name, a[k]])),
+    "Landing Page URL": text(b.landing_url).slice(0, 2000), "Conversion Page URL": text(b.page).slice(0, 2000), Referrer: text(b.referrer).slice(0, 500),
+    "Lead Form": FORM_NAME[text(b.form)] ?? "Website form", "Website Studio": STUDIO_NAME[key],
+  };
+}
+
+export function leadNote(key: StudioKey, b: Body, req: LeadRequest, submission: number, phoneRefused: boolean, now = new Date()): string {
+  const a = attribution(b);
+  const siteHost = toUrl(b.page)?.hostname.replace(/^www\./, "") ?? "infinitefitnessaustin.com";
+  const landed = Number(b.landed_at);
+  return [
+    `${NOTE_MARKER} — Infinite Fitness ${STUDIO_NAME[key]}`,
+    `Submitted: ${CT.format(now)}`,
+    submission === 0 ? "Submission # unknown (note count failed)" : submission === 1 ? "Submission #1 for this contact (new website lead)" : `Submission #${submission} for this contact (returning lead)`,
+    `Channel: ${channel(a, text(b.referrer), siteHost)}`,
+    "",
+    "— LEAD —",
+    `Name: ${dash([text(b.first_name), text(b.last_name)].filter(Boolean).join(" "))}`,
+    `Phone: ${dash(text(b.phone))}${phoneRefused ? " (GHL refused this number, so it is only here)" : ""}`,
+    `Email: ${dash(text(b.email))}`,
+    `Studio: ${STUDIO_NAME[key]}`,
+    `Form: ${FORM_NAME[text(b.form)] ?? "Website form"}`,
+    `Asked for: ${text(b.interest) === "pricing" ? "Pricing" : "A free 1-1 session"}`,
+    "",
+    "— ATTRIBUTION —",
+    `utm_source: ${dash(a.utm_source)} · utm_medium: ${dash(a.utm_medium)}`,
+    `utm_campaign: ${dash(a.utm_campaign)}`,
+    `utm_term: ${dash(a.utm_term)} · utm_content: ${dash(a.utm_content)}`,
+    `gclid: ${dash(a.gclid)}`,
+    `gbraid: ${dash(a.gbraid)} · wbraid: ${dash(a.wbraid)}`,
+    `fbclid: ${dash(a.fbclid)} · msclkid: ${dash(a.msclkid)}`,
+    "",
+    "— JOURNEY —",
+    `Landing page: ${dash(text(b.landing_url))}`,
+    `Conversion page: ${dash(text(b.page))}`,
+    `Referrer: ${dash(text(b.referrer))}`,
+    `Landed: ${landed ? CT.format(new Date(landed)) : "—"}`,
+    `Time on site before submit: ${landed ? since(now.getTime() - landed) : "unknown"}`,
+    "",
+    "— TECH —",
+    `Device: ${device(req.userAgent ?? "")}`,
+    `IP: ${dash(req.ip ?? "")}`,
+    `User agent: ${dash(req.userAgent ?? "")}`,
+    `Delivered via: GHL API (Private Integration) · ${siteHost}`,
+  ].join("\n");
+}
+
+// A phone GHL refuses must not lose the contact: it goes in again without one and the caller notes the number
+export async function upsertContact(d: Deps, token: string, key: StudioKey, b: Body) {
+  const contact = {
+    locationId: LOCATION_ID, firstName: text(b.first_name), lastName: text(b.last_name) || undefined, email: text(b.email), phone: text(b.phone), source: "Website",
+    customFields: [{ id: STUDIO_FIELD, value: STUDIO_NAME[key] }, { id: STUDIO_FIELD_2, value: `${STUDIO_NAME[key]}, TX` }],
+  };
+  let res = await ghl(d, token, "/contacts/upsert", "POST", contact);
+  const phoneRefused = res.status === 400 || res.status === 422;
+  if (phoneRefused) res = await ghl(d, token, "/contacts/upsert", "POST", { ...contact, phone: undefined });
   if (!res.ok) throw new Error(`upsert ${res.status}`);
-  const id = ((await res.json()) as { contact?: { id?: string } }).contact?.id;
+  const json = (await res.json()) as { contact?: { id?: string }; new?: boolean };
+  const id = json.contact?.id;
   if (!id) throw new Error("upsert returned no contact id");
+  return { id, isNew: json.new === true, phoneRefused, phoneNote: phoneRefused ? `Phone as typed: ${contact.phone}` : "" };
+}
+
+// Upsert → first-touch fields (new contacts only) → note → tags. Tags go last so the workflow they start already sees
+// the fields and the note. Only the upsert and the tags can fail a delivery; the rest is logged and skipped.
+async function deliver(d: Deps, key: StudioKey, token: string, b: Body, req: LeadRequest) {
+  const { id, isNew, phoneRefused } = await upsertContact(d, token, key, b);
+  if (isNew) {
+    try {
+      const list = await ghl(d, token, `/locations/${LOCATION_ID}/customFields?model=contact`, "GET");
+      if (!list.ok) throw new Error(`field list ${list.status}`);
+      const ids = new Map(((await list.json()) as { customFields?: { id: string; name: string }[] }).customFields?.map((f) => [f.name.trim(), f.id]) ?? []);
+      const customFields = Object.entries(firstTouch(key, b)).flatMap(([name, value]) => (value && ids.has(name) ? [{ id: ids.get(name), value }] : []));
+      if (customFields.length) {
+        const put = await ghl(d, token, `/contacts/${id}`, "PUT", { customFields });
+        if (!put.ok) throw new Error(`fields ${put.status}`);
+      }
+    } catch (err) {
+      d.log(`[lead] FIELDS FAILED contact ${id}: ${String(err)} ${JSON.stringify(firstTouch(key, b))}`);
+    }
+  }
+  let submission = 1;
+  if (!isNew) {
+    const got = await ghl(d, token, `/contacts/${id}/notes`, "GET").catch(() => null);
+    const notes = got?.ok ? (((await got.json().catch(() => ({}))) as { notes?: { body?: string }[] }).notes ?? []) : null;
+    submission = notes ? 1 + notes.filter((n) => n.body?.startsWith(NOTE_MARKER)).length : 0;
+  }
+  const note = leadNote(key, b, req, submission, phoneRefused);
+  const noted = await ghl(d, token, `/contacts/${id}/notes`, "POST", { body: note }).catch(() => null);
+  if (!noted?.ok) d.log(`[lead] NOTE FAILED contact ${id}, add by hand: ${note}`);
   // Only so a returning contact re-fires the workflow; it must never block the tags below
   await ghl(d, token, `/contacts/${id}/tags`, "DELETE", { tags: [TRIGGER] }).catch((err) => d.log(`[lead] tag reset failed ${id}: ${String(err)}`));
   const tags = [TRIGGER, TAG[key], ...(text(b.interest) === "pricing" ? ["website-pricing"] : [])];
   const added = await ghl(d, token, `/contacts/${id}/tags`, "POST", { tags });
   if (!added.ok) throw new Error(`tags ${added.status}`);
-  if (note) {
-    const noted = await ghl(d, token, `/contacts/${id}/notes`, "POST", { body: note }).catch(() => null);
-    if (!noted?.ok) d.log(`[lead] NOTE FAILED contact ${id}, add by hand: ${note}`);
-  }
 }
 
 export async function handleLead(req: LeadRequest, d: Deps): Promise<LeadResponse> {
@@ -130,19 +257,14 @@ export async function handleLead(req: LeadRequest, d: Deps): Promise<LeadRespons
   }
   d.log(`[lead] received ${JSON.stringify({ location: key, receivedAt: new Date().toISOString(), body: b })}`);
 
-  const token = d.env[`GHL_PIT_TOKEN_${key.toUpperCase()}`];
-  const locationId = d.env[`GHL_LOCATION_ID_${key.toUpperCase()}`];
-  if (!token || !locationId) {
+  const token = d.env.GHL_PIT_TOKEN;
+  if (!token) {
     if (!d.live) return ok({ preview: true });
     d.log(`[lead] DELIVERY FAILED no credentials for ${key} on the live site: ${JSON.stringify(b)}`);
     return ok();
   }
-  if (d.pins[key] !== locationId) {
-    d.log(`[lead] REFUSED location id does not match the pin for ${key}: ${JSON.stringify(b)}`);
-    return ok();
-  }
   try {
-    await deliver(d, key, token, locationId, b);
+    await deliver(d, key, token, b, req);
     return ok({ delivered: true });
   } catch (err) {
     d.log(`[lead] DELIVERY FAILED ${key} ${String(err)}: ${JSON.stringify(b)}`);

@@ -530,7 +530,31 @@ html:not(.js) .rband .rmore { display: none; }   /* without the script the butto
 @media (max-width: 639px) { .form button[type=submit] { width: 100%; } }
 .success { display: flex; flex-direction: column; gap: 16px; }
 .success:focus { outline: none; }
-.preview-note[hidden] { display: none; }
+.preview-note[hidden], .success .t-lede[hidden] { display: none; }
+.gp { display: flex; flex-direction: column; gap: 16px; padding-top: 24px; border-top: 1px solid var(--line); }
+.gp[hidden], .gp-sample[hidden], .gp-choice[hidden] { display: none; }
+.gp:focus { outline: none; }
+.gp .t-h3 span { white-space: nowrap; }
+.gp-sample { font-size: 16px; color: var(--body); }
+.gp-step { display: grid; gap: 12px; margin-top: 8px; }
+.gp-label { display: flex; align-items: center; gap: 12px; font-weight: 700; color: var(--ink); }
+.gp-num { flex: none; display: grid; place-items: center; width: 28px; height: 28px; font-family: var(--mono); font-size: 15px; font-weight: 500; color: var(--paper); background: var(--ink); }
+.gp-days { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.gp-times { display: grid; gap: 16px; }
+.gp-part { display: grid; gap: 8px; }
+.gp-part-name { font-size: 15px; color: var(--muted); }
+.gp-part-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 8px; }
+.gp-note { font-size: 15px; color: var(--muted); }
+.gp-pick { min-height: 48px; padding: 8px 4px; font: inherit; font-size: 16px; white-space: nowrap; color: var(--ink); background: var(--paper); border: 1px solid var(--line); cursor: pointer; }
+.gp-days .gp-pick { display: grid; justify-items: center; gap: 2px; padding: 10px 2px; }
+.gp-days .gp-pick span { font-family: var(--mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+.gp-days .gp-pick span:last-child { order: 1; font-family: var(--sans); font-size: 24px; font-weight: 700; line-height: 1.15; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+.gp-days .gp-pick span:nth-child(2) { order: 2; }
+.gp-choice { display: grid; gap: 4px; padding: 12px 16px; background: var(--surface); color: var(--ink); }
+.gp-choice .mono { font-size: 13px; color: var(--muted); }
+.gp-pick:hover { border-color: var(--ink); }
+.gp-pick[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.gp .btn { width: 100%; }
 .preview-note { background: var(--surface); padding: 16px; font-size: 16px; color: var(--body); border-left: 2px solid var(--ink); }
 
 /* ---------- Closing band (FinalBand) ---------- */

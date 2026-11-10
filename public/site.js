@@ -10,6 +10,17 @@
   const $$ = (s, el = document) => Array.from(el.querySelectorAll(s));
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+  // ---------- Where this visit started, for the lead's attribution fields and note (D-071) ----------
+  let visit = {};
+  try {
+    visit = JSON.parse(sessionStorage.getItem("ifa_visit") || "null");
+    if (!visit) {
+      const ref = document.referrer && new URL(document.referrer).host !== location.host ? document.referrer : "";
+      visit = { landing_url: location.href, referrer: ref, landed_at: Date.now() };
+      sessionStorage.setItem("ifa_visit", JSON.stringify(visit));
+    }
+  } catch { visit = visit || {}; }
+
   // ---------- Header: opaque white + hairline once scrolling starts (D-014) ----------
   const header = $("[data-header]");
   const onScrollHeader = () => header && header.classList.toggle("is-scrolled", window.scrollY > 8);
@@ -130,6 +141,132 @@
     if (i.type === "tel") describe(i, `${i.id}-hint`, !bad && oddPhone(i.value));
     return !bad;
   };
+  // The game plan call: the step after any lead form. The lead is already saved, so if times can't load this stays hidden.
+  const TZ = "America/Chicago";
+  const dayLabel = (date) => new Date(`${date}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" });
+  const timeLabel = (iso) => new Date(iso).toLocaleTimeString("en-US", { timeZone: TZ, hour: "numeric", minute: "2-digit" });
+  const whenLabel = (iso) => `${new Date(iso).toLocaleDateString("en-US", { timeZone: TZ, weekday: "long", month: "long", day: "numeric" })} at ${timeLabel(iso)} Central.`;
+  // Preview only: stand-in times so the step can be reviewed before the calendar is connected
+  const sampleDays = () => {
+    const days = [];
+    for (let i = 1; days.length < 5; i++) {
+      const d = new Date(Date.now() + i * 864e5);
+      if (d.getDay() === 0) continue;
+      const date = d.toLocaleDateString("en-CA", { timeZone: TZ });
+      const offset = new Date(`${date}T18:00:00Z`).toLocaleString("en-US", { timeZone: TZ, timeZoneName: "short" }).includes("CDT") ? "-05:00" : "-06:00";
+      days.push({ date, slots: ["09:00", "10:30", "12:00", "15:00", "16:30"].map((t) => `${date}T${t}:00${offset}`) });
+    }
+    return days;
+  };
+  const gamePlan = (ok, lead, select) => {
+    const box = $("[data-gp]", ok);
+    const bookBtn = $("[data-gp-book]", box);
+    const error = $("[data-gp-error]", box);
+    const choice = $("[data-gp-choice]", box);
+    // The free-session line changes only once the calendar is really on screen
+    const line = $("[data-gp-line]", ok);
+    if (line) { line._plain = line._plain || line.textContent; line.textContent = line._plain; line.hidden = false; }
+    let start = null;
+    const pickButton = (label, pressed, onClick) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "gp-pick";
+      b.textContent = label;
+      b.setAttribute("aria-pressed", String(pressed));
+      b.addEventListener("click", onClick);
+      return b;
+    };
+    const press = (list, chosen) => $$(".gp-pick", list).forEach((b) => b.setAttribute("aria-pressed", String(b === chosen)));
+    const render = (days) => {
+      start = null;
+      const dayList = $("[data-gp-days]", box);
+      const timeList = $("[data-gp-times]", box);
+      const showDay = (day) => {
+        $("[data-gp-for]", box).textContent = dayLabel(day.date);
+        choice.hidden = true;
+        const parts = timeList.dataset.parts.split("|").map((name) => ({ name, buttons: [] }));
+        day.slots.forEach((iso) => {
+          const hour = Number(new Date(iso).toLocaleString("en-US", { timeZone: TZ, hour: "numeric", hourCycle: "h23" }));
+          const b = pickButton(timeLabel(iso), false, () => {
+            start = iso;
+            error.hidden = true;
+            press(timeList, b);
+            $("[data-gp-choice-when]", box).textContent = whenLabel(iso);
+            choice.hidden = false;
+          });
+          parts[hour < 12 ? 0 : hour < 17 ? 1 : 2].buttons.push(b);
+        });
+        timeList.replaceChildren(...parts.filter((p) => p.buttons.length).map((p) => {
+          const group = document.createElement("div");
+          group.className = "gp-part";
+          const name = document.createElement("p");
+          name.className = "gp-part-name";
+          name.textContent = p.name;
+          const grid = document.createElement("div");
+          grid.className = "gp-part-grid";
+          grid.append(...p.buttons);
+          group.append(name, grid);
+          return group;
+        }));
+      };
+      dayList.replaceChildren(...days.map((day, i) => {
+        const label = dayLabel(day.date);
+        const b = pickButton("", i === 0, () => { start = null; press(dayList, b); showDay(day); });
+        b.setAttribute("aria-label", label);
+        b.append(...label.replace(",", "").split(" ").map((text) => {
+          const s = document.createElement("span");
+          s.textContent = text;
+          return s;
+        }));
+        return b;
+      }));
+      showDay(days[0]);
+      box.hidden = false;
+    };
+    const finish = (panel) => {
+      box.hidden = true;
+      if (line) line.hidden = true;
+      panel.hidden = false;
+      panel.focus({ preventScroll: true });
+      panel.scrollIntoView({ block: "nearest" });
+    };
+    const booked = (iso) => {
+      $("[data-gp-when]", ok).textContent = whenLabel(iso);
+      finish($("[data-gp-done]", ok));
+    };
+    const busy = (on) => { bookBtn.disabled = on; if (on) bookBtn.setAttribute("aria-busy", "true"); else bookBtn.removeAttribute("aria-busy"); };
+    bookBtn.onclick = () => {
+      if (!start) { error.textContent = error.dataset.pick; error.hidden = false; return; }
+      error.hidden = true;
+      if (!APP) { booked(start); return; }
+      busy(true);
+      fetch("/api/book", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...lead, start }) })
+        .then((r) => r.json())
+        .then((j) => {
+          busy(false);
+          if (j.reason === "slot_taken" && j.days && j.days.length) {
+            render(j.days);
+            error.textContent = error.dataset.taken;
+            error.hidden = false;
+          } else if (j.booked || j.preview) {
+            // Real bookings only: a preview or a pending request must never count as a conversion
+            if (j.booked && window.dataLayer) window.dataLayer.push({ event: "schedule_call", lead_location: select.selectedOptions[0].textContent, event_id: crypto.randomUUID(), interest: lead.interest || "free_session" });
+            booked(start);
+          } else finish($("[data-gp-pending]", ok));
+        })
+        .catch(() => { busy(false); finish($("[data-gp-pending]", ok)); });
+    };
+    ["[data-gp-done]", "[data-gp-pending]"].forEach((s) => { $(s, ok).hidden = true; });
+    const sample = $("[data-gp-sample]", box);
+    box.hidden = true;
+    sample.hidden = true;
+    const show = (days, isSample) => { if (days.length) { sample.hidden = !isSample; if (line) line.textContent = line.dataset.gpLine; render(days); } };
+    if (!APP) { show(sampleDays(), true); return; }
+    fetch("/api/slots")
+      .then((r) => r.json())
+      .then((j) => { if (j.ok) show(j.preview ? sampleDays() : j.days, !!j.preview); })
+      .catch(() => {});
+  };
   const setupForm = (form) => {
     const select = form.elements.namedItem("studio");
     form._all = Array.from(select.options).map((o) => o.cloneNode(true));
@@ -147,7 +284,7 @@
       const root = form.closest("[data-form-root]");
       btn.disabled = true;
       btn.setAttribute("aria-busy", "true");
-      const done = (preview) => {
+      const done = (preview, lead) => {
         btn.disabled = false;
         btn.removeAttribute("aria-busy");
         const ok = $("[data-form-success]", root);
@@ -156,16 +293,17 @@
         ok.hidden = false;
         ok.focus({ preventScroll: true });
         ok.scrollIntoView({ block: "nearest" });
+        gamePlan(ok, lead, select);
       };
       if (!APP) {
         // Mockup: no fetch, no dataLayer event, no lead.
         console.info("[preview] lead form submitted, not sent:", form.dataset.formId, select.value);
-        setTimeout(() => done(true), 600);
+        setTimeout(() => done(true, {}), 600);
         return;
       }
       const body = Object.fromEntries(new FormData(form));
       body.elapsed_ms = Date.now() - form._t0;
-      body.page = location.pathname + location.search;
+      Object.assign(body, visit, { page: location.href, form: form.dataset.formId });
       fetch("/api/lead", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
         .then((r) => r.json().then((j) => { if (!r.ok || !j.ok) throw new Error("lead"); return j; }))
         .then((j) => {
@@ -173,7 +311,7 @@
           if (j.delivered && window.dataLayer) {
             window.dataLayer.push({ event: "generate_lead", lead_location: select.selectedOptions[0].textContent, event_id: crypto.randomUUID(), interest: body.interest || "free_session", user_data: { email: body.email, phone_number: body.phone } });
           }
-          done(j.preview);
+          done(j.preview, body);
         })
         .catch(() => {
           btn.disabled = false;
