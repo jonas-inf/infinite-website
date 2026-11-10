@@ -898,6 +898,7 @@ body:has(dialog[open]) { overflow: hidden; }
 .steps.one .step { display: flex; flex-direction: column; gap: 6px; padding: 16px 0; }
 .steps.one .step-body { display: block; }
 .formbox { border: 1px solid var(--line); padding: 24px; }
+.cal-hdr { position: static; }
 .cal-sec { padding-top: 32px; }
 .cal-h1 { margin: 16px 0 12px; }
 .cal-line { margin: 0 0 24px; }
