@@ -901,6 +901,7 @@ body:has(dialog[open]) { overflow: hidden; }
 .cal-sec { padding-top: 32px; }
 .cal-h1 { margin: 16px 0 12px; }
 .cal-line { margin: 0 0 24px; }
+.cal-review { margin: 0 0 40px; }
 @media (min-width: 768px) { .formbox { padding: 40px; } }
 .formbox a { overflow-wrap: anywhere; }
 .center-page { min-height: 44vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; text-align: center; }
