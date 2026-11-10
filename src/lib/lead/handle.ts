@@ -85,7 +85,7 @@ const PARAMS: [string, string][] = [
   ["utm_source", "UTM Source"], ["utm_medium", "UTM Medium"], ["utm_campaign", "UTM Campaign"], ["utm_term", "UTM Term"], ["utm_content", "UTM Content"],
   ["gclid", "Google Click ID"], ["gbraid", "GBRAID"], ["wbraid", "WBRAID"], ["fbclid", "Facebook Click ID"], ["msclkid", "Microsoft Click ID"],
 ];
-const FORM_NAME: Record<string, string> = { home: "Home page form", st: "Studio page form", bk: "Book page form", dr: "Booking drawer", pr: "Pricing pop-up" };
+const FORM_NAME: Record<string, string> = { home: "Home page form", st: "Studio page form", bk: "Book page form", dr: "Booking drawer", pr: "Pricing pop-up", cal: "Calendar page form" };
 const CT = new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", weekday: "short", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
 
 const toUrl = (v: unknown) => { try { return new URL(text(v)); } catch { return null; } };
