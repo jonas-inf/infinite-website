@@ -8,7 +8,8 @@ const STUDIO_FIELD = "q1E72JUxRsPlma4Rq5Q4"; // "Select your preferred Infinite 
 const STUDIO_FIELD_2 = "85UFCvQ59zDfMLF6iluC"; // "Choose Your Location"; its options are these names plus ", TX" (D-072)
 export const STUDIO_NAME: Record<StudioKey, string> = { shoal_creek: "Shoal Creek", steiner_ranch: "Steiner Ranch", round_rock: "Round Rock" };
 
-export const TAG: Record<StudioKey, string> = { shoal_creek: "website-shoal-creek", steiner_ranch: "website-steiner-ranch", round_rock: "website-round-rock" };
+// The account's existing plain location tags; the only studio tag a website contact gets (D-079)
+export const LOCATION_TAG: Record<StudioKey, string> = { shoal_creek: "shoal creek", steiner_ranch: "steiner", round_rock: "round rock" };
 const TRIGGER = "website-lead";
 const GHL_API = "https://services.leadconnectorhq.com";
 const GHL_VERSION = "2021-07-28";
@@ -221,7 +222,7 @@ async function deliver(d: Deps, key: StudioKey, token: string, b: Body, req: Lea
   if (!noted?.ok) d.log(`[lead] NOTE FAILED contact ${id}, add by hand: ${note}`);
   // Only so a returning contact re-fires the workflow; it must never block the tags below
   await ghl(d, token, `/contacts/${id}/tags`, "DELETE", { tags: [TRIGGER] }).catch((err) => d.log(`[lead] tag reset failed ${id}: ${String(err)}`));
-  const tags = [TRIGGER, TAG[key], ...(text(b.interest) === "pricing" ? ["website-pricing"] : [])];
+  const tags = [TRIGGER, LOCATION_TAG[key], ...(text(b.interest) === "pricing" ? ["website-pricing"] : [])];
   const added = await ghl(d, token, `/contacts/${id}/tags`, "POST", { tags });
   if (!added.ok) throw new Error(`tags ${added.status}`);
 }

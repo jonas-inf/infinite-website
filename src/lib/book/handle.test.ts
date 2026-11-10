@@ -67,7 +67,7 @@ test("book: re-checks the slot, books once on the shared calendar and names the 
   assert.equal(a.body.startTime, SLOT);
   assert.equal(a.body.title, "Game Plan Call: Pat Lee (Steiner Ranch)");
   assert.equal(a.token, "Bearer tok-cal");
-  assert.deepEqual(calls.find((c) => c.url.endsWith("/tags"))?.body.tags, ["website-game-plan", "website-steiner-ranch"]);
+  assert.deepEqual(calls.find((c) => c.url.endsWith("/tags"))?.body.tags, ["website-game-plan", "steiner"]);
   assert.match(String(calls.find((c) => c.url.endsWith("/notes"))?.body.body), /^📅 GAME PLAN CALL BOOKED .*Steiner Ranch$/);
   assert.ok(calls.findIndex((c) => c.url.includes("/free-slots")) < calls.indexOf(a));
 });

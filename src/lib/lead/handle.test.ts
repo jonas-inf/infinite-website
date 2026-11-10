@@ -22,7 +22,7 @@ function deps(over: Partial<Deps> = {}, respond?: (c: Call, n: number) => Respon
 const lead = (o: Record<string, unknown> = {}) => ({ studio: "shoal_creek", first_name: "Ann", email: "a@example.com", phone: "5125550100", elapsed_ms: 5000, ...o });
 const req = (b: unknown, o: Partial<Parameters<typeof handleLead>[0]> = {}) => ({ raw: JSON.stringify(b), contentType: "application/json", origin: "http://localhost:3030", referer: null, ...o });
 
-for (const [key, name, tag] of [["shoal_creek", "Shoal Creek", "website-shoal-creek"], ["steiner_ranch", "Steiner Ranch", "website-steiner-ranch"], ["round_rock", "Round Rock", "website-round-rock"]]) {
+for (const [key, name, loc] of [["shoal_creek", "Shoal Creek", "shoal creek"], ["steiner_ranch", "Steiner Ranch", "steiner"], ["round_rock", "Round Rock", "round rock"]]) {
   test(`${key} delivers with its own studio field and tag only`, async () => {
     const { d, calls } = deps();
     const r = await handleLead(req(lead({ studio: key })), d);
@@ -32,7 +32,7 @@ for (const [key, name, tag] of [["shoal_creek", "Shoal Creek", "website-shoal-cr
     assert.equal(calls[0].body.locationId, "JDjtGIq6vm95CBfpbfKs");
     assert.deepEqual(calls[0].body.customFields, [{ id: "q1E72JUxRsPlma4Rq5Q4", value: name }, { id: "85UFCvQ59zDfMLF6iluC", value: `${name}, TX` }]);
     const tags = calls.filter((c) => c.url.endsWith("/tags") && c.method === "POST").flatMap((c) => c.body.tags as string[]);
-    assert.deepEqual(tags.sort(), ["website-lead", tag].sort());
+    assert.deepEqual(tags.sort(), ["website-lead", loc].sort());
     assert.equal(calls[0].body.tags, undefined);
   });
 }

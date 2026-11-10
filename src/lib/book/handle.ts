@@ -2,7 +2,7 @@
 // studios, through the private integration key (never sent to the browser). The lead already went through /api/lead,
 // so nothing here can lose it. Never a false "booked": anything uncertain answers `pending`
 // and logs enough to rebook by hand. The appointment POST is never retried, because GHL may already have made it.
-import { LOCATION_ID, STUDIO_KEYS, STUDIO_NAME, TAG, ghl, parse, spamReason, text, upsertContact, type Deps, type LeadRequest, type StudioKey } from "../lead/handle.ts";
+import { LOCATION_ID, STUDIO_KEYS, STUDIO_NAME, LOCATION_TAG, ghl, parse, spamReason, text, upsertContact, type Deps, type LeadRequest, type StudioKey } from "../lead/handle.ts";
 
 const GHL_API = "https://services.leadconnectorhq.com";
 const CAL_VERSION = "2021-04-15";
@@ -109,7 +109,7 @@ export async function handleBook(req: BookRequest, d: Deps): Promise<BookRespons
     });
     if (!made.ok) throw new Error(`appointment ${made.status}`);
     // The appointment exists now, so a failed tag must not read as a failed booking
-    await ghl(d, token, `/contacts/${id}/tags`, "POST", { tags: ["website-game-plan", TAG[key]] })
+    await ghl(d, token, `/contacts/${id}/tags`, "POST", { tags: ["website-game-plan", LOCATION_TAG[key]] })
       .then((r) => { if (!r.ok) throw new Error(`tags ${r.status}`); })
       .catch((err) => d.log(`[book] TAGS FAILED contact ${id}, add by hand: ${String(err)}`));
     const when = new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" }).format(ms);
